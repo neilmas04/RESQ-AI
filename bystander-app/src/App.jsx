@@ -181,18 +181,33 @@ const getFallbackFirstAidSteps = (language = 'en-US') => {
 };
 
 const buildFallbackTriagePayload = (language, description = '') => {
-  const hasSeriousKeywords = /unconscious|heavy bleeding|difficulty breathing|severe burn|fracture|not responding|choking/i.test(description || '');
-  const severity = hasSeriousKeywords ? 'Red' : 'Yellow';
+  const sourceText = String(description || '');
+  const hasCriticalKeywords = /unconscious|heavy bleeding|difficulty breathing|severe burn|not responding|choking|cardiac arrest|spinal/i.test(sourceText);
+  const hasUrgentKeywords = /fracture|broken|dislocated|deep cut|open wound|moderate bleeding|severe pain|cannot move/i.test(sourceText);
+  const hasNoInjuryKeywords = /no injury|not injured|no visible injury|clear face|normal face|just face|selfie|looks fine|all good|no pain/i.test(sourceText);
+
+  let severity = 'Green';
+  if (hasCriticalKeywords) {
+    severity = 'Red';
+  } else if (hasUrgentKeywords) {
+    severity = 'Yellow';
+  } else if (hasNoInjuryKeywords) {
+    severity = 'Green';
+  }
+
+  const fallbackInjuryTypeBySeverity = {
+    Red: 'Potential critical injury (AI fallback)',
+    Yellow: 'Potential urgent injury (AI fallback)',
+    Green: 'No obvious injury detected (AI fallback)'
+  };
   return {
     data: {
       severity,
-      injury_type: severity === 'Red'
-        ? 'Potential critical injury (AI fallback)'
-        : 'Potential urgent injury (AI fallback)',
+      injury_type: fallbackInjuryTypeBySeverity[severity],
       first_aid_steps: getFallbackFirstAidSteps(language)
     },
     insight: {
-      confidence: 0.58,
+      confidence: severity === 'Green' ? 0.52 : 0.58,
       evidence: ['AI service unavailable, fallback triage activated.', 'Manual dispatcher review required.'],
       review_recommended: true,
       review_reason: 'AI service was unavailable. Dispatcher review is required immediately.'

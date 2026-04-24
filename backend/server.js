@@ -23,6 +23,9 @@ const TRIAGE_SIGNAL_RULES = [
   { regex: /minor cut|small cut|bruise|swelling|sprain|mild pain/i, label: 'Minor trauma indicators are present.', severities: ['Green'] }
 ];
 
+const NO_INJURY_SIGNALS_REGEX = /no injury|not injured|no visible injury|clear face|normal face|just face|selfie|looks fine|all good|nothing happened|fine now|no pain/i;
+const HIGH_RISK_SIGNALS_REGEX = /heavy bleeding|profuse bleeding|hemorrhage|unconscious|not responding|difficulty breathing|cannot breathe|gasping|choking|severe burn|third[- ]degree burn|spinal|neck trauma|fracture|broken|dislocated|deep cut|open wound|gaping wound|moderate bleeding|significant pain|severe pain|cannot move/i;
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const buildTriageInsight = ({ severity, injuryType, firstAidSteps, description }) => {
@@ -86,7 +89,7 @@ Analyze the injury image AND the bystander's verbal report: "${description || 'N
 Determine SOS dispatch severity using these strict medical criteria:
 - RED (Critical): Life-threatening - heavy bleeding, unconsciousness, suspected spinal injury, cardiac arrest, severe burns, difficulty breathing.
 - YELLOW (Serious): Urgent but stable - moderate bleeding, fractures, deep lacerations, significant pain.
-- GREEN (Minor): Non-urgent - minor cuts, bruises, mild sprains.
+- GREEN (Minor): Non-urgent - minor cuts, bruises, mild sprains, or no visible injury.
 
 Return ONLY a single raw JSON object with exactly these keys and no extras:
 {
@@ -99,7 +102,7 @@ Strict output rules:
 - No markdown, no code fences, no explanation text.
 - "severity" must be exactly one of: Red, Yellow, Green.
 - "first_aid_steps" must be numbered steps (e.g., 1. ... 2. ... 3. ...).
-- If uncertain between categories, choose the safer higher-severity category.`;
+- If image appears normal and the verbal report has no symptoms or injury, choose Green (do not escalate severity without evidence).`;
 
     const result = await model.generateContent([
       prompt,
@@ -133,8 +136,15 @@ Strict output rules:
       throw new Error('Missing required triage fields from model.');
     }
 
+    const combinedSignalsText = `${description || ''} ${injuryType || ''} ${firstAidSteps || ''}`;
+    const hasNoInjurySignals = NO_INJURY_SIGNALS_REGEX.test(combinedSignalsText);
+    const hasHighRiskSignals = HIGH_RISK_SIGNALS_REGEX.test(combinedSignalsText);
+    const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals && severity !== 'Green'
+      ? 'Green'
+      : severity;
+
     const insight = buildTriageInsight({
-      severity,
+      severity: finalSeverity,
       injuryType,
       firstAidSteps,
       description
@@ -142,7 +152,7 @@ Strict output rules:
 
     res.json({
       data: {
-        severity,
+        severity: finalSeverity,
         injury_type: injuryType,
         first_aid_steps: firstAidSteps
       },
