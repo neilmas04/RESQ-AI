@@ -139,7 +139,7 @@ Strict output rules:
     const userDescriptionText = String(description || '');
     const hasNoInjurySignals = NO_INJURY_SIGNALS_REGEX.test(userDescriptionText);
     const hasHighRiskSignals = HIGH_RISK_SIGNALS_REGEX.test(userDescriptionText);
-    const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals
+    const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals && severity === 'Yellow'
       ? 'Green'
       : severity;
 
