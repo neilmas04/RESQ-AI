@@ -139,7 +139,7 @@ Strict output rules:
     const combinedSignalsText = `${description || ''} ${injuryType || ''} ${firstAidSteps || ''}`;
     const hasNoInjurySignals = NO_INJURY_SIGNALS_REGEX.test(combinedSignalsText);
     const hasHighRiskSignals = HIGH_RISK_SIGNALS_REGEX.test(combinedSignalsText);
-    const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals && severity !== 'Green'
+    const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals
       ? 'Green'
       : severity;
 
