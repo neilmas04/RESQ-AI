@@ -23,7 +23,7 @@ const TRIAGE_SIGNAL_RULES = [
   { regex: /minor cut|small cut|bruise|swelling|sprain|mild pain/i, label: 'Minor trauma indicators are present.', severities: ['Green'] }
 ];
 
-const NO_INJURY_SIGNALS_REGEX = /no injury|not injured|no visible injury|clear face|normal face|just face|selfie|looks fine|all good|nothing happened|fine now|no pain/i;
+const NO_INJURY_SIGNALS_REGEX = /no injury|not injured|no visible injury|no wounds?|clear face|normal face|no pain/i;
 const HIGH_RISK_SIGNALS_REGEX = /heavy bleeding|profuse bleeding|hemorrhage|unconscious|not responding|difficulty breathing|cannot breathe|gasping|choking|severe burn|third[- ]degree burn|spinal|neck trauma|fracture|broken|dislocated|deep cut|open wound|gaping wound|moderate bleeding|significant pain|severe pain|cannot move/i;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -136,9 +136,9 @@ Strict output rules:
       throw new Error('Missing required triage fields from model.');
     }
 
-    const combinedSignalsText = `${description || ''} ${injuryType || ''} ${firstAidSteps || ''}`;
-    const hasNoInjurySignals = NO_INJURY_SIGNALS_REGEX.test(combinedSignalsText);
-    const hasHighRiskSignals = HIGH_RISK_SIGNALS_REGEX.test(combinedSignalsText);
+    const userDescriptionText = String(description || '');
+    const hasNoInjurySignals = NO_INJURY_SIGNALS_REGEX.test(userDescriptionText);
+    const hasHighRiskSignals = HIGH_RISK_SIGNALS_REGEX.test(userDescriptionText);
     const finalSeverity = hasNoInjurySignals && !hasHighRiskSignals
       ? 'Green'
       : severity;

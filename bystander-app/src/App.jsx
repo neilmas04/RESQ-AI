@@ -184,7 +184,7 @@ const buildFallbackTriagePayload = (language, description = '') => {
   const sourceText = String(description || '');
   const hasCriticalKeywords = /unconscious|heavy bleeding|difficulty breathing|severe burn|not responding|choking|cardiac arrest|spinal/i.test(sourceText);
   const hasUrgentKeywords = /fracture|broken|dislocated|deep cut|open wound|moderate bleeding|severe pain|cannot move/i.test(sourceText);
-  const hasNoInjuryKeywords = /no injury|not injured|no visible injury|clear face|normal face|just face|selfie|looks fine|all good|no pain/i.test(sourceText);
+  const hasNoInjuryKeywords = /no injury|not injured|no visible injury|no wounds?|clear face|normal face|no pain/i.test(sourceText);
 
   let severity = 'Green';
   if (hasCriticalKeywords) {
