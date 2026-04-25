@@ -20,7 +20,8 @@ const TRIAGE_SIGNAL_RULES = [
   { regex: /fracture|broken|deformity|dislocated/i, label: 'Fracture or skeletal injury indicators are present.', severities: ['Yellow'] },
   { regex: /deep cut|deep laceration|open wound|gaping wound/i, label: 'Deep wound indicators are present.', severities: ['Yellow'] },
   { regex: /moderate bleeding|significant pain|severe pain|cannot move/i, label: 'Moderate-to-severe injury symptoms are present.', severities: ['Yellow'] },
-  { regex: /minor cut|small cut|bruise|swelling|sprain|mild pain/i, label: 'Minor trauma indicators are present.', severities: ['Green'] }
+  { regex: /minor cut|small cut|bruise|swelling|sprain|mild pain/i, label: 'Minor trauma indicators are present.', severities: ['Green'] },
+  { regex: /no injury|no visible injury|false alarm|clear face/i, label: 'No visible injury detected.', severities: ['Green'] }
 ];
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -78,7 +79,7 @@ app.post('/api/triage', async (req, res) => {
   console.log('Request received...');
   try {
     const { image, language = 'en-US', description = '' } = req.body;
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
     const prompt = `You are an expert emergency medical AI triage assistant.
 Analyze the injury image AND the bystander's verbal report: "${description || 'No description provided'}".
@@ -86,20 +87,22 @@ Analyze the injury image AND the bystander's verbal report: "${description || 'N
 Determine SOS dispatch severity using these strict medical criteria:
 - RED (Critical): Life-threatening - heavy bleeding, unconsciousness, suspected spinal injury, cardiac arrest, severe burns, difficulty breathing.
 - YELLOW (Serious): Urgent but stable - moderate bleeding, fractures, deep lacerations, significant pain.
-- GREEN (Minor): Non-urgent - minor cuts, bruises, mild sprains.
+- GREEN (Minor/None): Non-urgent - minor cuts, bruises, mild sprains, OR no visible injury detected.
+
+CRITICAL INSTRUCTION: If the image clearly shows NO INJURY (e.g., a clear face, normal room, random object) and the verbal report does not indicate an emergency, YOU MUST classify it as "Green" and set "injury_type" to "No visible injury". DO NOT hallucinate or guess injuries if none exist.
 
 Return ONLY a single raw JSON object with exactly these keys and no extras:
 {
   "severity": "Red" | "Yellow" | "Green",
-  "injury_type": "<specific injury name in ${language} locale>",
-  "first_aid_steps": "<numbered, practical first-aid steps in ${language} locale>"
+  "injury_type": "<specific injury name or 'No visible injury' in ${language} locale>",
+  "first_aid_steps": "<numbered, practical first-aid steps or '1. No first aid required' in ${language} locale>"
 }
 
 Strict output rules:
 - No markdown, no code fences, no explanation text.
 - "severity" must be exactly one of: Red, Yellow, Green.
 - "first_aid_steps" must be numbered steps (e.g., 1. ... 2. ... 3. ...).
-- If uncertain between categories, choose the safer higher-severity category.`;
+- If uncertain between categories, choose the safer higher-severity category, UNLESS it's clearly a non-injury photo.`;
 
     const result = await model.generateContent([
       prompt,
@@ -150,6 +153,26 @@ Strict output rules:
     });
   } catch (error) {
     console.error('BACKEND ERROR:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/generate-report', async (req, res) => {
+  try {
+    const incident = req.body;
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const prompt = `You are an AI Incident Reporting Assistant for ResQ Emergency Services.
+Generate a formal, concise post-incident medical report based on the following data:
+Severity: ${incident.severity}
+Injury Type: ${incident.injury_type}
+Final Outcome: ${incident.finalOutcome || 'Closed'}
+
+Write a 2-3 paragraph professional summary including "Incident Overview", "Triage Assessment", and "Resolution". Keep it brief and use simple text formatting.`;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    res.json({ report: response.text() });
+  } catch (error) {
+    console.error('REPORT ERROR:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -1192,13 +1192,22 @@ function ResponderApp() {
           duplicatePayload.insight = triagePayload.insight;
         }
 
-        await updateDoc(doc(db, 'emergencies', duplicateMatch.id), duplicatePayload);
-
         const mergedResult = {
           severity: duplicateMatch.data.severity || triagePayload.data.severity,
           injury_type: duplicateMatch.data.injury_type || triagePayload.data.injury_type,
           first_aid_steps: duplicateMatch.data.first_aid_steps || triagePayload.data.first_aid_steps
         };
+
+        if (mergedResult.severity === 'Red' && (!duplicateMatch.data.status || duplicateMatch.data.status === 'pending')) {
+          duplicatePayload.status = 'dispatched';
+          duplicatePayload.dispatchedAt = serverTimestamp();
+          duplicatePayload.ambulanceETA = 5;
+          duplicatePayload.driverInfo = { name: 'Auto-Assigned Unit', vehicle: 'AI-RESP-AUTO', phone: '+91-9999999999' };
+          duplicatePayload.manualReviewStatus = 'closed';
+        }
+
+        await updateDoc(doc(db, 'emergencies', duplicateMatch.id), duplicatePayload);
+
 
         setResult(mergedResult);
         setTriageInsight(duplicateMatch.data.insight || triagePayload.insight || null);
@@ -1222,6 +1231,7 @@ function ResponderApp() {
       }
 
       const isSevere = triagePayload.data.severity === 'Red' || triagePayload.data.severity === 'Yellow';
+      const isRed = triagePayload.data.severity === 'Red';
       const responderOriginData = rankedHospitals[0]
         ? {
           lat: rankedHospitals[0].lat,
@@ -1248,7 +1258,7 @@ function ResponderApp() {
         manualReviewRequestedAt: manualReviewRequired ? serverTimestamp() : null,
         manualReviewStatus: manualReviewRequired ? 'open' : 'not_required',
         priorityDispatchSuggested: isSevere || fallbackMode,
-        status: 'pending',
+        status: isRed ? 'dispatched' : 'pending',
         requiredCapability: inferredCapability,
         recommendedHospitals: hospitalSnapshots,
         aiFallbackUsed: fallbackMode,
@@ -1256,7 +1266,15 @@ function ResponderApp() {
         fallbackReason: fallbackMode ? 'AI service unavailable' : null,
         isSmsFallback
       };
-      
+
+      if (isRed) {
+        payload.dispatchedAt = serverTimestamp();
+        payload.ambulanceETA = 5;
+        payload.driverInfo = { name: 'Auto-Assigned Unit', vehicle: 'AI-RESP-AUTO', phone: '+91-9999999999' };
+        payload.manualReviewStatus = 'closed';
+      }
+
+
       if (isSmsFallback) {
         payload.injuryImage = null;
         payload.imageFingerprint = null;
@@ -1298,7 +1316,7 @@ function ResponderApp() {
   const notifyVolunteers = async () => {
     if (!activeIncidentId) return;
     setVolunteerStatus('searching');
-    
+
     setTimeout(async () => {
       try {
         await updateDoc(doc(db, 'emergencies', activeIncidentId), {
@@ -1640,16 +1658,16 @@ function ResponderApp() {
               {!isIncidentClosed && (
                 <div className="mt-5 pt-5 border-t border-white/10 relative z-10">
                   <h4 className="text-xs font-bold uppercase text-zinc-300 mb-2">Community Response</h4>
-                  
+
                   {volunteerStatus === 'idle' && !incidentUpdate?.volunteerAlerted && (
-                    <button 
+                    <button
                       onClick={notifyVolunteers}
                       className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)]"
                     >
                       <User size={18} /> Notify Nearby Volunteers
                     </button>
                   )}
-                  
+
                   {volunteerStatus === 'searching' && !incidentUpdate?.volunteerAlerted && (
                     <div className="w-full bg-blue-900/40 border border-blue-500/30 text-blue-200 font-bold py-3 rounded-xl flex items-center justify-center gap-2">
                       <span className="animate-pulse flex items-center gap-2">

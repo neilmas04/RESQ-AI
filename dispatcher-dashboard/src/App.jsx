@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { db } from './firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -115,6 +115,9 @@ function App() {
   const [myLocation, setMyLocation] = useState([12.3355, 76.6180]);
   const [idleAmbulances, setIdleAmbulances] = useState([]);
   const [closureNotes, setClosureNotes] = useState({});
+  const alertedIdsRef = useRef(new Set());
+  const [generatingReportFor, setGeneratingReportFor] = useState(null);
+  const [generatedReports, setGeneratedReports] = useState({});
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -293,6 +296,37 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    emergencies.forEach((emergency) => {
+      const isRecent = emergency.timestamp?.toMillis && (Date.now() - emergency.timestamp.toMillis() < 120000);
+      if (emergency.severity === 'Red' && isRecent && !alertedIdsRef.current.has(emergency.id)) {
+        alertedIdsRef.current.add(emergency.id);
+        if (window.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance('Critical Alert. Red priority emergency detected. Autonomous dispatch initiated.');
+          utterance.rate = 0.95;
+          window.speechSynthesis.speak(utterance);
+        }
+      }
+    });
+  }, [emergencies]);
+
+  const handleGenerateReport = async (emergency) => {
+    setGeneratingReportFor(emergency.id);
+    try {
+      const response = await fetch('http://localhost:5000/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emergency)
+      });
+      const data = await response.json();
+      setGeneratedReports(prev => ({ ...prev, [emergency.id]: data.report }));
+    } catch (error) {
+      console.error(error);
+      alert('Failed to generate AI report');
+    }
+    setGeneratingReportFor(null);
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="flex h-screen bg-[#09090b] text-white justify-center items-center relative overflow-hidden font-sans">
@@ -443,10 +477,10 @@ function App() {
                         />
                       </div>
                     )}
-                    
+
                     {!emergency.injuryImage && emergency.isSmsFallback && (
                       <div className="mb-3 rounded-xl border border-dashed border-orange-500/40 bg-orange-500/10 w-36 h-24 flex items-center justify-center p-2 text-center">
-                        <p className="text-[10px] text-orange-200/80 font-bold uppercase">No Image<br/>(SMS Fallback)</p>
+                        <p className="text-[10px] text-orange-200/80 font-bold uppercase">No Image<br />(SMS Fallback)</p>
                       </div>
                     )}
 
@@ -527,6 +561,24 @@ function App() {
                       <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2">
                         <p className="text-[11px] uppercase font-bold tracking-wide text-emerald-200">Final Outcome</p>
                         <p className="text-xs text-emerald-100">{emergency.finalOutcome || 'Closed by dispatcher.'}</p>
+
+                        {generatedReports[emergency.id] ? (
+                          <div className="mt-3 p-3 bg-black/50 rounded-xl border border-emerald-500/20 text-[10px] text-emerald-50/90 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                            {generatedReports[emergency.id]}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleGenerateReport(emergency)}
+                            disabled={generatingReportFor === emergency.id}
+                            className="mt-3 w-full bg-emerald-600/30 hover:bg-emerald-500/50 border border-emerald-500/50 text-emerald-100 py-2 rounded-lg text-[10px] font-bold uppercase transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {generatingReportFor === emergency.id ? (
+                              <span className="animate-pulse">Generating Report...</span>
+                            ) : (
+                              '📝 Generate AI Incident Report'
+                            )}
+                          </button>
+                        )}
                       </div>
                     )}
 
